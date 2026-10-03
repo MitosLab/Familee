@@ -1,0 +1,33 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function famUids(fid) { return get(/databases/$(database)/documents/families/$(fid)).data.uids; }
+
+    match /users/{uid} {
+      allow read, write: if signedIn() && request.auth.uid == uid;
+    }
+
+    match /invites/{code} {
+      allow get: if signedIn();
+      allow create: if signedIn() && request.auth.uid in famUids(request.resource.data.fid);
+    }
+
+    match /families/{fid} {
+      allow get: if signedIn();
+      allow create: if signedIn() && request.resource.data.uids == [request.auth.uid];
+      allow update: if signedIn() && (
+        request.auth.uid in resource.data.uids || (
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['members', 'order', 'uids'])
+          && request.resource.data.uids.hasAll(resource.data.uids)
+          && request.resource.data.uids.size() == resource.data.uids.size() + 1
+          && request.auth.uid in request.resource.data.uids
+        )
+      );
+
+      match /items/{iid} {
+        allow read, write: if signedIn() && request.auth.uid in famUids(fid);
+      }
+    }
+  }
+}
