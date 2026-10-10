@@ -1,5 +1,7 @@
 importScripts('https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js');
+self.addEventListener('install', () => self.skipWaiting());
+self.addEventListener('activate', e => e.waitUntil(self.clients.claim()));
 firebase.initializeApp({
   apiKey: 'AIzaSyBOdxp-VRbYR6qnB1S_-7AbC-loUGwuM_A',
   authDomain: 'familee-a676c.firebaseapp.com',
