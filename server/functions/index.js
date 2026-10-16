@@ -4,7 +4,7 @@
 const REGION = 'us-central1';
 
 const { onDocumentCreated } = require('firebase-functions/v2/firestore');
-const { setGlobalOptions } = require('firebase-functions/v2');
+const { setGlobalOptions, logger } = require('firebase-functions/v2');
 const admin = require('firebase-admin');
 
 admin.initializeApp();
@@ -20,17 +20,20 @@ exports.pushNotification = onDocumentCreated('families/{fid}/items/{iid}', async
   const db = admin.firestore();
   const fam = (await db.doc(`families/${event.params.fid}`).get()).data();
   const member = fam && fam.members && fam.members[n.to];
-  if (!member || !member.uid) return;
+  if (!member || !member.uid) { logger.warn('no member uid', { to: n.to, fid: event.params.fid }); return; }
   const userRef = db.doc(`users/${member.uid}`);
   const tokens = ((await userRef.get()).data() || {}).tokens || [];
-  if (!tokens.length) return;
+  if (!tokens.length) { logger.warn('no tokens', { uid: member.uid, to: n.to }); return; }
   const res = await admin.messaging().sendEachForMulticast({
     tokens,
     webpush: {
-      notification: { title: fam.name || 'Familee', body: n.text, icon: ICON },
+      headers: { Urgency: 'high', TTL: '86400' },
+      notification: { title: fam.name || 'Familee', body: n.text, icon: ICON, tag: event.params.iid },
       fcmOptions: { link: APP },
     },
   });
+  logger.info('push sent', { to: n.to, ok: res.successCount, failed: res.failureCount,
+    errors: res.responses.filter(r => !r.success).map(r => r.error && r.error.code) });
   const bad = tokens.filter((t, i) => !res.responses[i].success && DEAD.includes(res.responses[i].error && res.responses[i].error.code));
   if (bad.length) await userRef.update({ tokens: admin.firestore.FieldValue.arrayRemove(...bad) });
 });
